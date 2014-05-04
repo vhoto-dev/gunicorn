@@ -17,7 +17,7 @@ import traceback
 from gunicorn.errors import HaltServer, AppImportError
 from gunicorn.pidfile import Pidfile
 from gunicorn.sock import create_sockets
-from gunicorn.statsd import statsd, STATSD_INTERVAL
+from gunicorn.instrument import INSTRUMENT_INTERVAL
 from gunicorn import util
 
 from gunicorn import __version__, SERVER_SOFTWARE
@@ -109,17 +109,12 @@ class Arbiter(object):
                 in sorted(self.cfg.settings.items(),
                           key=lambda setting: setting[1]))))
 
+        # Set up instrumentation
+        self.instrument = self.cfg.instrument_class(app.cfg)
+
         if self.cfg.preload_app:
             self.app.wsgi()
-
-        # instrumentation setup via statsD if needed
-        self.use_statsd = self.cfg.statsd_host is not None
-        if self.use_statsd:
-            self.statsd = statsd(self.cfg.statsd_host, self.log)
-            self.log.info("Arbiter will send stats to {0}".format(self.cfg.statsd_host))
-        else:
-            self.log.info("Arbiter will not send stats")
-
+                
     def start(self):
         """\
         Initialize the arbiter. Start listening and set pidfile if needed.
@@ -297,19 +292,18 @@ class Arbiter(object):
 
     def handle_alrm(self):
         try:
-            # Optional statsd instrumentation
-            n_w = len(self.WORKERS)
-            self.statsd.gauge("gunicorn.workers", n_w)
+            if self.instrument is not None:
+                n_w = len(self.WORKERS)
+                self.instrument.gauge("gunicorn.workers", n_w)
 
-            # children user time over the past STATSD_INTERVAL will be normalized
-            # to 1 second. Dividing by the number of workers will then yield
-            # a utilization ratio per worker
-            usr_t = os.times()[0]
-            self.log.info("STAT arbiter.utilization={0}".format(usr_t - self.last_usr_t))
-            self.statsd.increment("gunicorn.arbiter.utilization", usr_t - self.last_usr_t)
-            self.last_usr_t = usr_t
-
-            signal.alarm(STATSD_INTERVAL)
+                # children user time over the past INSTRUMENT_INTERVAL will be normalized
+                # to 1 second. Dividing by the number of workers will then yield
+                # a utilization ratio per worker
+                usr_t = os.times()[0]
+                self.instrument.increment("gunicorn.arbiter.utilization", usr_t - self.last_usr_t)
+                self.last_usr_t = usr_t
+                # Schedule next alarm
+                signal.alarm(INSTRUMENT_INTERVAL)
         except Exception:
             self.log.exception("Cannot get statistics")
 

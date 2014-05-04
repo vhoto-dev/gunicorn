@@ -137,6 +137,14 @@ class Config(object):
         return logger_class
 
     @property
+    def instrument_class(self):
+        uri = self.settings['instrument_class'].get()
+        if uri == "statsd":
+            return util.load_class("gunicorn.instrument.statsd")
+        else:
+            return None
+
+    @property
     def is_ssl(self):
         return self.certfile or self.keyfile
 
@@ -1562,15 +1570,15 @@ class DoHandshakeOnConnect(Setting):
     Whether to perform SSL handshake on socket connect (see stdlib ssl module's)
     """
 
-class StatsdHost(Setting):
-    name = "statsd_host"
+class InstrumentClass(Setting):
+    name = "instrument_class"
     section = "Instrumentation"
-    cli = ["--statsd"]
+    cli = ["--instrument"]
     meta = "STRING"
-    validator = validate_hostport
-    default = None
+    validator = validate_string
+    default = "gunicorn.instrument.statsd"
     desc = """\
-    Host and port of the statsD server to send metrics to, e.g. localhost:8125
+    Class to use to instrument gunicorn's performance, default to statsd
     """
 
 if sys.version_info >= (2, 7):

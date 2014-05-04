@@ -18,7 +18,7 @@ LimitRequestLine, LimitRequestHeaders
 from gunicorn.http.errors import InvalidProxyLine, ForbiddenProxyRequest
 from gunicorn.http.wsgi import default_environ, Response
 from gunicorn.six import MAXSIZE
-from gunicorn.statsd import statsd, STATSD_INTERVAL
+from gunicorn.instrument import INSTRUMENT_INTERVAL
 
 
 class Worker(object):
@@ -49,12 +49,9 @@ class Worker(object):
         self.tmp = WorkerTmp(cfg)
 
         # instrumentation
-        self.use_statsd = cfg.statsd_host is not None
-        if self.use_statsd:
-            self.log.info("Worker will send stats to {0}".format(cfg.statsd_host))
-            self.last_nr = 0  # store nr at the last instrumentation call
-            self.last_usr_t = 0  # store last user time from os.times()
-            self.statsd = statsd(cfg.statsd_host, self.log)
+        self.instrument = self.cfg.instrument_class(app.cfg)
+        self.last_nr = 0  # store nr at the last instrumentation call
+        self.last_usr_t = 0  # store last user time from os.times()
 
     def __str__(self):
         return "<Worker %s>" % self.pid
@@ -147,7 +144,7 @@ class Worker(object):
 
         # Get the instrumentation timer started
         if self.use_statsd:
-            signal.alarm(STATSD_INTERVAL)
+            signal.alarm(INSTRUMENT_INTERVAL)
 
     def handle_usr1(self, sig, frame):
         self.log.reopen_files()
@@ -156,17 +153,15 @@ class Worker(object):
         "Send stats to statsd"
         try:
             # Track requests per seconds per gunicorn instance, ignore actual workers
-            self.statsd.increment("gunicorn.worker.rqs", self.nr - self.last_nr)
-            self.log.info("STAT worker={0} gunicorn.worker.requests=+{1}".format(self.pid, self.nr - self.last_nr))
+            self.instrument.increment("gunicorn.worker.rqs", self.nr - self.last_nr)
             self.last_nr = self.nr
 
             # Let statsd compute the ratio of user time / wallclock time
             usr_t = os.times()[0]
-            self.statsd.increment("gunicorn.worker.utilization", usr_t - self.last_usr_t)
-            self.log.info("STAT worker={0} gunicorn.worker.utilization={1}".format(self.pid, usr_t - self.last_usr_t))
+            self.instrument.increment("gunicorn.worker.utilization", usr_t - self.last_usr_t)
             self.last_usr_t = usr_t
 
-            signal.alarm(STATSD_INTERVAL)
+            signal.alarm(INSTRUMENT_INTERVAL)
         except Exception:
             self.log.exception("Cannot send stats to statsd")
 

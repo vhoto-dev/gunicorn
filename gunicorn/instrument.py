@@ -5,14 +5,13 @@
 
 """Bare-bones implementation of statsD's protocol, client-side
 """
-
 import socket
 
 # Instrumentation constants
 STATSD_INTERVAL = 5 # publish stats every ... seconds
 STATSD_DEFAULT_PORT = 8125
 
-class statsd(object):
+class Statsd(Instrument):
     def __init__(self, dst, log):
         """host, port: statsD server
         """
