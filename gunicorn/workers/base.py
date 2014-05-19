@@ -142,7 +142,7 @@ class Worker(object):
         if hasattr(signal, 'siginterrupt'):  # python >= 2.6
             signal.siginterrupt(signal.SIGQUIT, False)
             signal.siginterrupt(signal.SIGUSR1, False)
-            signal.siginterrupt(signal.SIGINFO, False)
+            # signal.siginterrupt(signal.SIGINFO, False)
             signal.siginterrupt(signal.SIGALRM, False)
 
         # Get the instrumentation timer started
